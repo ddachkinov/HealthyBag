@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────
+// User & Profile
+// ──────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatarUrl String?
+  locale    String   @default("bg")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile      UserProfile?
+  preferences  UserPreference?
+  mealPlans    MealPlan[]
+  achievements UserAchievement[]
+  recipes      Recipe[]          @relation("AuthoredRecipes")
+  ratings      RecipeRating[]
+}
+
+model UserProfile {
+  id             String  @id @default(cuid())
+  userId         String  @unique
+  age            Int
+  sex            String  // "male" | "female"
+  heightCm       Float
+  weightKg       Float
+  bodyFatPct     Float?
+  activityLevel  String  // "sedentary" | "lightly_active" | "moderately_active" | "very_active" | "athlete"
+  goal           String  // "lose_fat" | "lose_fat_aggressive" | "maintain" | "lean_gain" | "muscle_gain"
+  tdee           Float   // computed
+  targetCalories Float   // computed after goal adjustment
+  targetProtein  Float   // grams
+  targetCarbs    Float   // grams
+  targetFat      Float   // grams
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  dietType          String   @default("omnivore") // "omnivore" | "vegetarian" | "vegan" | "pescatarian"
+  allergies         String[] @default([])
+  excludedFoods     String[] @default([])
+  cookingSkill      String   @default("intermediate") // "beginner" | "intermediate" | "advanced"
+  maxPrepTimeMin    Int      @default(45)
+  mealsPerDay       Int      @default(3)
+  cuisineAffinities String[] @default([])
+  spiceTolerance    String   @default("medium") // "none" | "mild" | "medium" | "hot"
+  householdSize     Int      @default(1)
+  weeklyBudgetBgn   Float?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ──────────────────────────────────────────────
+// eBag.bg Products
+// ──────────────────────────────────────────────
+
+model EbagProduct {
+  id            String   @id @default(cuid())
+  ebagId        String   @unique
+  name          String
+  nameBg        String
+  category      String
+  subcategory   String?
+  price         Float
+  unit          String   // "kg" | "l" | "pcs" | "g"
+  weightGrams   Float?
+  imageUrl      String?
+  ebagUrl       String
+  inStock       Boolean  @default(true)
+  lastScrapedAt DateTime
+
+  nutrition  NutritionData?
+  promotions EbagPromotion[]
+  ingredients RecipeIngredient[]
+  shoppingItems ShoppingListItem[]
+}
+
+model EbagPromotion {
+  id             String   @id @default(cuid())
+  productId      String
+  originalPrice  Float
+  salePrice      Float
+  discountPct    Float
+  promoStartDate DateTime?
+  promoEndDate   DateTime?
+  scrapedAt      DateTime @default(now())
+
+  product EbagProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model NutritionData {
+  id              String @id @default(cuid())
+  productId       String @unique
+  caloriesPer100g Float
+  proteinPer100g  Float
+  carbsPer100g    Float
+  fatPer100g      Float
+  fiberPer100g    Float?
+  sodiumPer100g   Float?
+  source          String // "usda" | "open_food_facts" | "manual" | "ebag"
+  confidence      Float  @default(0.8) // 0-1 confidence in the nutritional mapping
+
+  product EbagProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// ──────────────────────────────────────────────
+// Recipes
+// ──────────────────────────────────────────────
+
+model Recipe {
+  id              String  @id @default(cuid())
+  title           String
+  titleBg         String
+  description     String?
+  descriptionBg   String?
+  cuisine         String  @default("bulgarian")
+  mealType        String  // "breakfast" | "lunch" | "dinner" | "snack"
+  difficulty      String  @default("intermediate") // "beginner" | "intermediate" | "advanced"
+  prepTimeMin     Int
+  cookTimeMin     Int
+  servings        Int     @default(2)
+  totalCalories   Float
+  totalProtein    Float
+  totalCarbs      Float
+  totalFat        Float
+  totalFiber      Float?
+  imageUrl        String?
+  isUserSubmitted Boolean @default(false)
+  authorId        String?
+  createdAt       DateTime @default(now())
+
+  author      User?             @relation("AuthoredRecipes", fields: [authorId], references: [id])
+  ingredients RecipeIngredient[]
+  steps       RecipeStep[]
+  ratings     RecipeRating[]
+  mealEntries MealPlanEntry[]
+
+  @@index([mealType])
+  @@index([cuisine])
+}
+
+model RecipeIngredient {
+  id                String  @id @default(cuid())
+  recipeId          String
+  productId         String?
+  ingredientName    String
+  ingredientNameBg  String
+  quantityGrams     Float
+  unit              String  @default("g")
+  isOptional        Boolean @default(false)
+  substitutionGroup String?
+
+  recipe  Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  product EbagProduct? @relation(fields: [productId], references: [id])
+
+  @@index([recipeId])
+}
+
+model RecipeStep {
+  id              String  @id @default(cuid())
+  recipeId        String
+  stepNumber      Int
+  instruction     String
+  instructionBg   String
+  durationMinutes Int?
+  timerSeconds    Int?
+  imageUrl        String?
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+}
+
+model RecipeRating {
+  id       String @id @default(cuid())
+  recipeId String
+  userId   String
+  rating   Int    // 1-5
+  comment  String?
+  createdAt DateTime @default(now())
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, userId])
+}
+
+// ──────────────────────────────────────────────
+// Meal Plans
+// ──────────────────────────────────────────────
+
+model MealPlan {
+  id               String   @id @default(cuid())
+  userId           String
+  startDate        DateTime
+  endDate          DateTime
+  totalCost        Float?
+  totalSavings     Float?
+  avgDailyCalories Float?
+  status           String   @default("active") // "active" | "completed" | "archived"
+  generatedAt      DateTime @default(now())
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries MealPlanEntry[]
+  shoppingList ShoppingList?
+
+  @@index([userId])
+}
+
+model MealPlanEntry {
+  id          String   @id @default(cuid())
+  mealPlanId  String
+  date        DateTime
+  mealSlot    String   // "breakfast" | "lunch" | "dinner" | "snack_1" | "snack_2"
+  recipeId    String
+  servings    Float    @default(1)
+  isCompleted Boolean  @default(false)
+  userRating  Int?
+
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  recipe   Recipe   @relation(fields: [recipeId], references: [id])
+
+  @@index([mealPlanId])
+  @@index([date])
+}
+
+// ──────────────────────────────────────────────
+// Shopping
+// ──────────────────────────────────────────────
+
+model ShoppingList {
+  id           String   @id @default(cuid())
+  mealPlanId   String   @unique
+  userId       String
+  totalCost    Float?
+  totalSavings Float?
+  createdAt    DateTime @default(now())
+
+  mealPlan MealPlan          @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  items    ShoppingListItem[]
+
+  @@index([userId])
+}
+
+model ShoppingListItem {
+  id             String  @id @default(cuid())
+  listId         String
+  productId      String?
+  ingredientName String
+  quantity       Float
+  unit           String
+  estimatedPrice Float?
+  isOnPromotion  Boolean @default(false)
+  isInPantry     Boolean @default(false)
+  isChecked      Boolean @default(false)
+
+  list    ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  product EbagProduct? @relation(fields: [productId], references: [id])
+
+  @@index([listId])
+}
+
+// ──────────────────────────────────────────────
+// Achievements
+// ──────────────────────────────────────────────
+
+model Achievement {
+  id          String @id @default(cuid())
+  slug        String @unique
+  name        String
+  nameBg      String
+  description String
+  descriptionBg String
+  iconUrl     String?
+  category    String // "streak" | "budget" | "variety" | "skill" | "waste"
+  threshold   Int
+
+  users UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  progress      Int      @default(0)
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+}
