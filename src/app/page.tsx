@@ -53,9 +53,12 @@ export default function Home() {
 
           {/* CTA */}
           <div className="pt-6">
-            <button className="bg-primary-500 hover:bg-primary-600 text-white font-heading font-bold text-lg px-10 py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-200">
+            <Link
+              href="/onboarding"
+              className="inline-block bg-primary-500 hover:bg-primary-600 text-white font-heading font-bold text-lg px-10 py-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            >
               Започни сега — безплатно
-            </button>
+            </Link>
             <p className="text-sm text-gray-400 mt-3">
               Start eating healthy for less. No credit card required.
             </p>
